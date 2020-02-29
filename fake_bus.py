@@ -34,7 +34,8 @@ async def run_bus(url, bus_id, route):
         while True:
             for coordinate in route:
                 message = make_message(bus_id, coordinate)
-                await ws.send_message(json.dumps(message))
+                await ws.send_message(json.dumps(message,
+                                                 ensure_ascii=False))
                 await trio.sleep(1)
 
 
