@@ -33,8 +33,9 @@ def make_message_to_browser(buses):
     }
     for bus_id, bus_info in buses.items():
         bus_info = bus_info.get("busInfo")
+        route = bus_info.get("route").split('-')[0]
         bus = {"busId": bus_id, "lat": bus_info.get('lat'), 
-                "lng": bus_info.get("lng"), "route": bus_info.get("route")}
+                "lng": bus_info.get("lng"), "route": route}
         message["buses"].append(bus)
     return message
  
@@ -42,7 +43,6 @@ def make_message_to_browser(buses):
 async def talk_to_browser(request):
     global buses
     ws = await request.accept()
-    route, coordinates = get_bus_from_file('156.json')
     while True:
         try:
             message = make_message_to_browser(buses)
