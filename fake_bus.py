@@ -7,7 +7,6 @@ from sys import stderr
 from trio_websocket import open_websocket_url
 
 
-
 def load_routes(directory_path='routes'):
     for filename in os.listdir(directory_path):
         if filename.endswith(".json"):
@@ -45,21 +44,6 @@ async def run_bus(send_chanel, bus_id, route):
             message = make_message(bus_id, coordinate)
             await send_chanel.send(json.dumps(message, ensure_ascii=False))
             await trio.sleep(1)
-    '''   
-    async with open_websocket_url(url) as ws:
-        start_offset = random.randint(1, len(route))
-        for coordinate in route[start_offset:]:
-            message = make_message(bus_id, coordinate)
-            await ws.send_message(json.dumps(message,
-                                             ensure_ascii=False))
-            await trio.sleep(1)
-        while True:
-            for coordinate in route:
-                message = make_message(bus_id, coordinate)
-                await ws.send_message(json.dumps(message,
-                                                 ensure_ascii=False))
-                await trio.sleep(1)
-    '''
 
 
 async def send_updates(server_address, receive_channel):
@@ -68,39 +52,29 @@ async def send_updates(server_address, receive_channel):
             pass
             message = await receive_channel.receive()
             await ws.send_message(message)
-'''
-async def producer(send_channel):
-    # Producer sends 3 messages
-    for i in range(3):
-        # The producer sends using 'await send_channel.send(...)'
-        await send_channel.send("message {}".format(i))
 
-
-async def consumer(receive_channel):
-    # The consumer uses an 'async for' loop to receive the values:
-    async for value in receive_channel:
-        print("got value {!r}".format(value))
-'''
 
 async def main():
     try:
         url = 'ws://127.0.0.1:8080'
         async with trio.open_nursery() as nursery:
             # Open a channel:
-            send_channel, receive_channel = trio.open_memory_channel(0)
-            # Start a producer and a consumer, passing one end of the channel to
-            # each of them:
-            # nursery.start_soon(producer, send_channel)
-            # nursery.start_soon(consumer, receive_channel)
-            
+            send_channels = []
+            receive_channels = []
+            for _ in range(3):
+                send_channel, receive_channel = trio.open_memory_channel(0)
+                send_channels.append(send_channel)
+                receive_channels.append(receive_channel)
             for route in load_routes():
                 for i in range(15):
                     bus = generate_bus_id(route.get('name'), i)
                     coordinates = route.get('coordinates')
-                    nursery.start_soon(run_bus, send_channel, bus, coordinates)
-            nursery.start_soon(send_updates, url, receive_channel)
+                    nursery.start_soon(run_bus, random.choice(send_channels), bus, coordinates)
+            for receive_channel in receive_channels:
+                nursery.start_soon(send_updates, url, receive_channel)
     except OSError as ose:
         print('Connection attempt failed: %s' % ose, file=stderr)
 
 
-trio.run(main)
+if __name__ == "__main__":
+    trio.run(main)
