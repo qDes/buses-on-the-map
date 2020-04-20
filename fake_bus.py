@@ -3,11 +3,29 @@ import logging
 import os
 import random
 import trio
+import time
 
 import asyncclick as click
+import trio_websocket
 from sys import stderr
 from trio_websocket import open_websocket_url
 from itertools import islice
+from functools import wraps
+
+from trio_websocket._impl import HandshakeError, ConnectionClosed
+
+def relaunch_on_disconnect(timeout):
+    def actual_decorator(async_function):
+        @wraps(async_function)
+        async def with_reconnect(*args, **kwargs):
+            while True:
+                try:
+                    await async_function(*args, **kwargs)
+                except (ConnectionClosed, HandshakeError):
+                    logging.info("Try to reconnect")
+                    time.sleep(timeout)
+        return with_reconnect
+    return actual_decorator
 
 
 def load_routes(directory_path):
@@ -49,6 +67,7 @@ async def run_bus(send_chanel, bus_id, route):
             await trio.sleep(1)
 
 
+@relaunch_on_disconnect(timeout=1)
 async def send_updates(server_address, receive_channel):
     async with open_websocket_url(server_address) as ws:
         while True:
@@ -62,7 +81,7 @@ async def send_updates(server_address, receive_channel):
 @click.option("-b", "--buses_per_route", default=5)
 @click.option("-w", "--websockets_number", default=3)
 @click.option("-e", "--emulator_id", default=0)
-@click.option("-t", "--refresh_timeout")
+@click.option("-t", "--refresh_timeout", default=1)
 @click.option("-v", default=False, help="enable logging")
 async def main(server, routes_number, buses_per_route,
                websockets_number, emulator_id,
