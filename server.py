@@ -40,17 +40,31 @@ def make_message_to_browser(buses):
     return message
  
 
-async def talk_to_browser(request):
+async def listen_browser(ws):
+    while True:
+        message = await ws.get_message()
+        print('Received message: %s', message)
+
+
+async def send_to_browser(ws):
     global buses
-    ws = await request.accept()
     while True:
         try:
             message = make_message_to_browser(buses)
-            print(len(message.get("buses")))
+            #print(len(message.get("buses")))
             await ws.send_message(json.dumps(message))
             await trio.sleep(.2)
         except ConnectionClosed:
             break
+
+
+
+async def talk_to_browser(request):
+    #global buses
+    ws = await request.accept()
+    async with trio.open_nursery() as nursery:
+        nursery.start_soon(send_to_browser, ws)
+        nursery.start_soon(listen_browser, ws)
 
 
 async def get_buses(request):
@@ -66,17 +80,16 @@ async def get_buses(request):
             break
 
 
+
 async def main():
     bus_reader = partial(serve_websocket, get_buses,
                          "127.0.0.1", 8080, ssl_context=None)
     bus_sender = partial(serve_websocket, talk_to_browser,
                          "127.0.0.1", 8000, ssl_context=None)
     async with trio.open_nursery() as nursery:
-    #await serve_websocket(talk_to_browser, "127.0.0.1", 8000, ssl_context=None)
-    #await serve_websocket(test) #get_buses, "127.0.0.1", 8080, ssl_context=None)
-        #server = await nursery.start_soon(serve_websocket,server, "127.0.0.1", 8080, ssl_context=None)
         nursery.start_soon(bus_reader)
         nursery.start_soon(bus_sender)
+
 
 if __name__ == "__main__":
     trio.run(main)
