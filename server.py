@@ -1,30 +1,48 @@
 import json
 import logging
 import trio
+import dataclasses
 
+from dataclasses import dataclass
 from functools import partial
 from trio_websocket import serve_websocket, ConnectionClosed
+from typing import Dict
+
+
+@dataclass
+class Bus:
+    lat:   float
+    lng:   float
+    route: str
+
+
+@dataclass
+class WindowBounds:
+    north_lat: float
+    south_lat: float
+    east_lng:  float
+    west_lng:  float
+
+    def update(self, bounds: Dict):
+        self.north_lat = bounds.get("north_lat")
+        self.south_lat = bounds.get("south_lat")
+        self.east_lng = bounds.get("east_lng")
+        self.west_lng = bounds.get("west_lng")
+
+    def is_inside(self, lat, lng):
+        if lat > self.north_lat:
+            return False
+        if lat < self.south_lat:
+            return False
+        if lng > self.east_lng:
+            return False
+        if lng < self.west_lng:
+            return False
+        return True
+
 
 buses = dict()
-window = dict()
-
-def get_bus_from_file(filename):
-    with open(filename, 'r') as f:
-        bus = json.loads(f.read())
-    bus_name = bus.get('name')
-    bus_coordinates = bus.get('coordinates')
-    return bus_name, bus_coordinates
-
-
-def make_message(route, coordinate):
-    message = {
-        "msgType": "Buses",
-        "buses": [
-            {"busId": "c790сс", "lat": coordinate[0], 
-             "lng": coordinate[1], "route": route},
-        ],
-    }
-    return message
+window = WindowBounds(0,0,0,0)
 
 
 def make_message_to_browser(buses):
@@ -35,7 +53,7 @@ def make_message_to_browser(buses):
     }
     for bus_id, bus_info in buses.items():
         bus_info = bus_info.get("busInfo")
-        if not is_inside(window, bus_info.get('lat'), bus_info.get('lng')):
+        if not window.is_inside(bus_info.get('lat'), bus_info.get('lng')):
             continue
         route = bus_info.get("route").split('-')[0]
         bus = {"busId": bus_id, "lat": bus_info.get('lat'), 
@@ -44,19 +62,6 @@ def make_message_to_browser(buses):
     return message
 
 
-def is_inside(bounds, lat, lng):
-    if not bounds:
-        return False
-    if lat > bounds.get("north_lat"):
-        return False
-    if lat < bounds.get("south_lat"):
-        return False
-    if lng > bounds.get("east_lng"):
-        return False
-    if lng < bounds.get("west_lng"):
-        return False
-    return True
-
 
 async def listen_browser(ws):
     global window
@@ -64,7 +69,8 @@ async def listen_browser(ws):
     logger.info("listen to the browser")
     while True:
         message = await ws.get_message()
-        window = json.loads(message).get("data")
+        window.update(json.loads(message).get("data"))
+        print(dataclasses.asdict(window))
         logger.info('Received message: %s', message)
 
 
@@ -81,7 +87,6 @@ async def send_to_browser(ws):
 
 
 async def talk_to_browser(request):
-    #global buses
     ws = await request.accept()
     async with trio.open_nursery() as nursery:
         nursery.start_soon(send_to_browser, ws)
