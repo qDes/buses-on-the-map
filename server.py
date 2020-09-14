@@ -52,7 +52,7 @@ def make_message_to_browser(buses):
         "buses": [],
     }
     for bus_id, bus_info in buses.items():
-        bus_info = bus_info.get("busInfo")
+        bus_info = dataclasses.asdict(bus_info.get("busInfo"))
         if not window.is_inside(bus_info.get('lat'), bus_info.get('lng')):
             continue
         route = bus_info.get("route").split('-')[0]
@@ -100,8 +100,10 @@ async def get_buses(request):
         try:
             message = await ws.get_message()
             message = json.loads(message)
-            buses[message.get("busId")] = {"busInfo":{"lat":message.get("lat"),
-        "lng": message.get("lng"), "route": message.get("route")}}
+            buses[message.get("busId")] = {"busInfo": Bus(message.get("lat"), 
+                                                          message.get("lng"), 
+                                                          message.get("route"))}
+            #{"busInfo":{"lat":message.get("lat"),"lng": message.get("lng"), "route": message.get("route")}}
         except ConnectionClosed:
             break
 
